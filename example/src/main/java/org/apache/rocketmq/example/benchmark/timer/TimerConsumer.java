@@ -40,152 +40,142 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TimerConsumer {
-    private final String topic;
+	private final String topic;
 
-    private final ScheduledExecutorService scheduledExecutor = new ScheduledThreadPoolExecutor(1, new ThreadFactoryImpl("ConsumerScheduleThread_"));
+	private final ScheduledExecutorService scheduledExecutor = new ScheduledThreadPoolExecutor(1, new ThreadFactoryImpl("ConsumerScheduleThread_"));
 
-    private final StatsBenchmarkConsumer statsBenchmark = new StatsBenchmarkConsumer();
-    private final LinkedList<Long[]> snapshotList = new LinkedList<>();
+	private final StatsBenchmarkConsumer	statsBenchmark	= new StatsBenchmarkConsumer();
+	private final LinkedList<Long[]>		snapshotList	= new LinkedList<>();
 
-    private final DefaultMQPushConsumer consumer;
+	private final DefaultMQPushConsumer consumer;
 
-    public TimerConsumer(String[] args) {
-        Options options = ServerUtil.buildCommandlineOptions(new Options());
-        final CommandLine commandLine = ServerUtil.parseCmdLine("benchmarkTimerConsumer", args, buildCommandlineOptions(options), new DefaultParser());
-        if (null == commandLine) {
-            System.exit(-1);
-        }
+	public TimerConsumer(String[] args) {
+		Options options = ServerUtil.buildCommandlineOptions(new Options());
+		final CommandLine commandLine = ServerUtil.parseCmdLine("benchmarkTimerConsumer", args, buildCommandlineOptions(options), new DefaultParser());
+		if (null == commandLine) {
+			System.exit(-1);
+		}
 
-        final String namesrvAddr = commandLine.hasOption('n') ? commandLine.getOptionValue('t').trim() : "localhost:9876";
-        topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
-        System.out.printf("namesrvAddr: %s, topic: %s%n", namesrvAddr, topic);
+		final String namesrvAddr = commandLine.hasOption('n') ? commandLine.getOptionValue('t').trim() : "localhost:9876";
+		topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
+		System.out.printf("namesrvAddr: %s, topic: %s%n", namesrvAddr, topic);
 
-        consumer = new DefaultMQPushConsumer("benchmark_consumer");
-        consumer.setInstanceName(Long.toString(System.currentTimeMillis()));
-        consumer.setNamesrvAddr(namesrvAddr);
-    }
+		consumer = new DefaultMQPushConsumer("benchmark_consumer");
+		consumer.setInstanceName(Long.toString(System.currentTimeMillis()));
+		consumer.setNamesrvAddr(namesrvAddr);
+	}
 
-    public void startScheduleTask() {
-        scheduledExecutor.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                snapshotList.addLast(statsBenchmark.createSnapshot());
-                if (snapshotList.size() > 10) {
-                    snapshotList.removeFirst();
-                }
-            }
-        }, 1000, 1000, TimeUnit.MILLISECONDS);
+	public void startScheduleTask() {
+		scheduledExecutor.scheduleAtFixedRate(new TimerTask() {
+			@Override
+			public void run() {
+				snapshotList.addLast(statsBenchmark.createSnapshot());
+				if (snapshotList.size() > 10) {
+					snapshotList.removeFirst();
+				}
+			}
+		}, 1000, 1000, TimeUnit.MILLISECONDS);
 
-        scheduledExecutor.scheduleAtFixedRate(new TimerTask() {
-            private void printStats() {
-                if (snapshotList.size() >= 10) {
-                    Long[] begin = snapshotList.getFirst();
-                    Long[] end = snapshotList.getLast();
+		scheduledExecutor.scheduleAtFixedRate(new TimerTask() {
+			private void printStats() {
+				if (snapshotList.size() >= 10) {
+					Long[] begin = snapshotList.getFirst();
+					Long[] end = snapshotList.getLast();
 
-                    final long consumeTps =
-                            (long) (((end[1] - begin[1]) / (double) (end[0] - begin[0])) * 1000L);
-                    final double avgDelayedDuration = (end[2] - begin[2]) / (double) (end[1] - begin[1]);
+					final long consumeTps = (long) (((end[1] - begin[1]) / (double) (end[0] - begin[0])) * 1000L);
+					final double avgDelayedDuration = (end[2] - begin[2]) / (double) (end[1] - begin[1]);
 
-                    List<Long> delayedDurationList = new ArrayList<>(TimerConsumer.this.statsBenchmark.getDelayedDurationMsSet());
-                    if (delayedDurationList.isEmpty()) {
-                        System.out.printf("Consume TPS: %d, Avg delayedDuration: %7.3f, Max delayedDuration: 0, %n",
-                                consumeTps, avgDelayedDuration);
-                    } else {
-                        long delayedDuration25 = delayedDurationList.get((int) (delayedDurationList.size() * 0.25));
-                        long delayedDuration50 = delayedDurationList.get((int) (delayedDurationList.size() * 0.5));
-                        long delayedDuration80 = delayedDurationList.get((int) (delayedDurationList.size() * 0.8));
-                        long delayedDuration90 = delayedDurationList.get((int) (delayedDurationList.size() * 0.9));
-                        long delayedDuration99 = delayedDurationList.get((int) (delayedDurationList.size() * 0.99));
-                        long delayedDuration999 = delayedDurationList.get((int) (delayedDurationList.size() * 0.999));
+					List<Long> delayedDurationList = new ArrayList<>(TimerConsumer.this.statsBenchmark.getDelayedDurationMsSet());
+					if (delayedDurationList.isEmpty()) {
+						System.out.printf("Consume TPS: %d, Avg delayedDuration: %7.3f, Max delayedDuration: 0, %n", consumeTps, avgDelayedDuration);
+					} else {
+						long delayedDuration25 = delayedDurationList.get((int) (delayedDurationList.size() * 0.25));
+						long delayedDuration50 = delayedDurationList.get((int) (delayedDurationList.size() * 0.5));
+						long delayedDuration80 = delayedDurationList.get((int) (delayedDurationList.size() * 0.8));
+						long delayedDuration90 = delayedDurationList.get((int) (delayedDurationList.size() * 0.9));
+						long delayedDuration99 = delayedDurationList.get((int) (delayedDurationList.size() * 0.99));
+						long delayedDuration999 = delayedDurationList.get((int) (delayedDurationList.size() * 0.999));
 
-                        System.out.printf("Consume TPS: %d, Avg delayedDuration: %7.3f, Max delayedDuration: %d, " +
-                                        "delayDuration %%25: %d, %%50: %d; %%80: %d; %%90: %d; %%99: %d; %%99.9: %d%n",
-                                consumeTps, avgDelayedDuration, delayedDurationList.get(delayedDurationList.size() - 1),
-                                delayedDuration25, delayedDuration50, delayedDuration80, delayedDuration90, delayedDuration99, delayedDuration999);
-                    }
-                }
-            }
+						System.out.printf("Consume TPS: %d, Avg delayedDuration: %7.3f, Max delayedDuration: %d, " + "delayDuration %%25: %d, %%50: %d; %%80: %d; %%90: %d; %%99: %d; %%99.9: %d%n", consumeTps, avgDelayedDuration, delayedDurationList.get(delayedDurationList.size() - 1), delayedDuration25, delayedDuration50, delayedDuration80, delayedDuration90, delayedDuration99, delayedDuration999);
+					}
+				}
+			}
 
-            @Override
-            public void run() {
-                try {
-                    this.printStats();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }, 10000, 10000, TimeUnit.MILLISECONDS);
-    }
+			@Override
+			public void run() {
+				try {
+					this.printStats();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}, 10000, 10000, TimeUnit.MILLISECONDS);
+	}
 
-    public void start() throws MQClientException {
-        consumer.subscribe(topic, "*");
+	public void start() throws MQClientException {
+		consumer.subscribe(topic, "*");
 
-        consumer.registerMessageListener(new MessageListenerConcurrently() {
-            @Override
-            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
-                MessageExt msg = msgs.get(0);
-                long now = System.currentTimeMillis();
+		consumer.registerMessageListener(new MessageListenerConcurrently() {
+			@Override
+			public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
+				MessageExt msg = msgs.get(0);
+				long now = System.currentTimeMillis();
 
-                statsBenchmark.getReceiveMessageTotalCount().incrementAndGet();
+				statsBenchmark.getReceiveMessageTotalCount().incrementAndGet();
 
-                long deliverTimeMs = Long.parseLong(msg.getProperty("MY_RECORD_TIMER_DELIVER_MS"));
-                long delayedDuration = now - deliverTimeMs;
+				long deliverTimeMs = Long.parseLong(msg.getProperty("MY_RECORD_TIMER_DELIVER_MS"));
+				long delayedDuration = now - deliverTimeMs;
 
-                statsBenchmark.getDelayedDurationMsSet().add(delayedDuration);
-                statsBenchmark.getDelayedDurationMsTotal().addAndGet(delayedDuration);
+				statsBenchmark.getDelayedDurationMsSet().add(delayedDuration);
+				statsBenchmark.getDelayedDurationMsTotal().addAndGet(delayedDuration);
 
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            }
-        });
+				return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+			}
+		});
 
-        consumer.start();
-        System.out.printf("Start receiving messages%n");
-    }
+		consumer.start();
+		System.out.printf("Start receiving messages%n");
+	}
 
-    private Options buildCommandlineOptions(Options options) {
-        Option opt = new Option("n", "namesrvAddr", true, "Nameserver address, default: localhost:9876");
-        opt.setRequired(false);
-        options.addOption(opt);
+	private Options buildCommandlineOptions(Options options) {
+		Option opt = new Option("n", "namesrvAddr", true, "Nameserver address, default: localhost:9876");
+		opt.setRequired(false);
+		options.addOption(opt);
 
-        opt = new Option("t", "topic", true, "Send messages to which topic, default: BenchmarkTest");
-        opt.setRequired(false);
-        options.addOption(opt);
+		opt = new Option("t", "topic", true, "Send messages to which topic, default: BenchmarkTest");
+		opt.setRequired(false);
+		options.addOption(opt);
 
-        return options;
-    }
+		return options;
+	}
 
-    public static void main(String[] args) throws MQClientException {
-        TimerConsumer timerConsumer = new TimerConsumer(args);
-        timerConsumer.startScheduleTask();
-        timerConsumer.start();
-    }
+	public static void main(String[] args) throws MQClientException {
+		TimerConsumer timerConsumer = new TimerConsumer(args);
+		timerConsumer.startScheduleTask();
+		timerConsumer.start();
+	}
 
+	public static class StatsBenchmarkConsumer {
+		private final AtomicLong receiveMessageTotalCount = new AtomicLong(0L);
 
-    public static class StatsBenchmarkConsumer {
-        private final AtomicLong receiveMessageTotalCount = new AtomicLong(0L);
+		private final AtomicLong					delayedDurationMsTotal	= new AtomicLong(0L);
+		private final ConcurrentSkipListSet<Long>	delayedDurationMsSet	= new ConcurrentSkipListSet<>();
 
-        private final AtomicLong delayedDurationMsTotal = new AtomicLong(0L);
-        private final ConcurrentSkipListSet<Long> delayedDurationMsSet = new ConcurrentSkipListSet<>();
+		public Long[] createSnapshot() {
+			return new Long[] { System.currentTimeMillis(), this.receiveMessageTotalCount.get(), this.delayedDurationMsTotal.get(), };
+		}
 
-        public Long[] createSnapshot() {
-            return new Long[]{
-                    System.currentTimeMillis(),
-                    this.receiveMessageTotalCount.get(),
-                    this.delayedDurationMsTotal.get(),
-            };
-        }
+		public AtomicLong getReceiveMessageTotalCount() {
+			return receiveMessageTotalCount;
+		}
 
-        public AtomicLong getReceiveMessageTotalCount() {
-            return receiveMessageTotalCount;
-        }
+		public AtomicLong getDelayedDurationMsTotal() {
+			return delayedDurationMsTotal;
+		}
 
-        public AtomicLong getDelayedDurationMsTotal() {
-            return delayedDurationMsTotal;
-        }
-
-        public ConcurrentSkipListSet<Long> getDelayedDurationMsSet() {
-            return delayedDurationMsSet;
-        }
-    }
+		public ConcurrentSkipListSet<Long> getDelayedDurationMsSet() {
+			return delayedDurationMsSet;
+		}
+	}
 
 }
