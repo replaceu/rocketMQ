@@ -71,6 +71,7 @@ import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+//服务端的实现类，实现了RemotingServer接口，继承NettyRemotingAbstract抽象类
 @SuppressWarnings("NullableProblems")
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.ROCKETMQ_REMOTING_NAME);
