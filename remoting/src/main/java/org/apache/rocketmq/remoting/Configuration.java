@@ -102,10 +102,8 @@ public class Configuration {
         if (extProperties == null) {
             return this;
         }
-
         try {
             readWriteLock.writeLock().lockInterruptibly();
-
             try {
                 merge(extProperties, this.allConfigs);
             } finally {

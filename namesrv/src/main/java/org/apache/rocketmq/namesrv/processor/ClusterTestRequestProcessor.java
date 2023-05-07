@@ -31,6 +31,7 @@ import org.apache.rocketmq.remoting.protocol.header.namesrv.GetRouteInfoRequestH
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
 
+//处理请求类型
 public class ClusterTestRequestProcessor extends ClientRequestProcessor {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final DefaultMQAdminExt adminExt;

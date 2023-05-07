@@ -20,6 +20,7 @@ import io.netty.channel.Channel;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 
+//netty的channel共用方法抽象
 public class BrokerHousekeepingService implements ChannelEventListener {
 
     private final NamesrvController namesrvController;

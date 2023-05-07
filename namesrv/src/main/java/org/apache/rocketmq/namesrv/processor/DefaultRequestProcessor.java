@@ -67,6 +67,7 @@ import org.apache.rocketmq.remoting.protocol.header.namesrv.WipeWritePermOfBroke
 import org.apache.rocketmq.remoting.protocol.namesrv.RegisterBrokerResult;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
+//默认地请求处理器, 处理数据包
 public class DefaultRequestProcessor implements NettyRequestProcessor {
     private static Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 

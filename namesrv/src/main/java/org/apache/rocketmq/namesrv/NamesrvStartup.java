@@ -40,8 +40,8 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.srvutil.ServerUtil;
 import org.apache.rocketmq.srvutil.ShutdownHookThread;
 
+//NameServer的启动类, 启动netty server
 public class NamesrvStartup {
-
     private final static Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static Logger logConsole = LoggerFactory.getLogger(LoggerName.NAMESRV_CONSOLE_LOGGER_NAME);
     private static Properties properties = null;
@@ -58,6 +58,7 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
         try {
             parseCommandlineAndConfigFile(args);
+            //创建namesrvController
             NamesrvController controller = createAndStartNamesrvController();
             return controller;
         } catch (Throwable e) {
@@ -135,8 +136,8 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController createAndStartNamesrvController() throws Exception {
-
         NamesrvController controller = createNamesrvController();
+        //初始化并启动NamesrvController
         start(controller);
         NettyServerConfig serverConfig = controller.getNettyServerConfig();
         String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
@@ -154,24 +155,19 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController start(final NamesrvController controller) throws Exception {
-
         if (null == controller) {
             throw new IllegalArgumentException("NamesrvController is null");
         }
-
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
             System.exit(-3);
         }
-
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, (Callable<Void>) () -> {
             controller.shutdown();
             return null;
         }));
-
         controller.start();
-
         return controller;
     }
 
