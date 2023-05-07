@@ -95,6 +95,7 @@ public class NamesrvStartup {
         nettyServerConfig = new NettyServerConfig();
         nettyClientConfig = new NettyClientConfig();
         nettyServerConfig.setListenPort(9876);
+        // -c选项，指定配置文件路径
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -116,6 +117,7 @@ public class NamesrvStartup {
         }
 
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
+        //-p选项 只打印系统参数，不启动，直接退出
         if (commandLine.hasOption('p')) {
             MixAll.printObjectProperties(logConsole, namesrvConfig);
             MixAll.printObjectProperties(logConsole, nettyServerConfig);
@@ -219,10 +221,11 @@ public class NamesrvStartup {
     }
 
     public static Options buildCommandlineOptions(final Options options) {
+        // -c选项，指定配置文件路径
         Option opt = new Option("c", "configFile", true, "Name server config properties file");
         opt.setRequired(false);
         options.addOption(opt);
-
+        // -p选项 只打印系统参数，不启动，直接退出
         opt = new Option("p", "printConfigItem", false, "Print all config items");
         opt.setRequired(false);
         options.addOption(opt);

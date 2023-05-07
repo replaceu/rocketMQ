@@ -104,9 +104,10 @@ public class NamesrvController {
 	private void loadConfig() {
 		this.kvConfigManager.load();
 	}
-	//与broker建立长连接，扫描所有的broker
 	private void startScheduleService() {
+		//每隔10s扫描一次Broker,移除不活跃的Broker
 		this.scanExecutorService.scheduleAtFixedRate(NamesrvController.this.routeInfoManager::scanNotActiveBroker, 5, this.namesrvConfig.getScanNotActiveBrokerInterval(), TimeUnit.MILLISECONDS);
+		//每隔10min打印一次KV配置
 		this.scheduledExecutorService.scheduleAtFixedRate(NamesrvController.this.kvConfigManager::printAllPeriodically, 1, 10, TimeUnit.MINUTES);
 		this.scheduledExecutorService.scheduleAtFixedRate(() -> {
 			try {
@@ -118,7 +119,7 @@ public class NamesrvController {
 	}
 
 	private void initiateNetworkComponents() {
-		//启动netty server, 管理channel
+		//创建netty服务器
 		this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 		this.remotingClient = new NettyRemotingClient(this.nettyClientConfig);
 	}
@@ -143,9 +144,8 @@ public class NamesrvController {
 
 	private void initiateSslContext() {
 		if (TlsSystemConfig.tlsMode == TlsMode.DISABLED) { return; }
-
 		String[] watchFiles = { TlsSystemConfig.tlsServerCertPath, TlsSystemConfig.tlsServerKeyPath, TlsSystemConfig.tlsServerTrustCertPath };
-
+		//实时监听文件的变化
 		FileWatchService.Listener listener = new FileWatchService.Listener() {
 			boolean certChanged, keyChanged = false;
 
@@ -198,7 +198,7 @@ public class NamesrvController {
 		return slowTimeMills;
 	}
 
-	// 注册netty请求Handler, 可以通过NettyRequestProcessor接口找到其实现类
+	//注册默认的处理类 DefaultRequestProcessor,所有的请求均由该处理类的 processRequest 方法来处理
 	private void registerProcessor() {
 		if (namesrvConfig.isClusterTest()) {
 			this.remotingServer.registerDefaultProcessor(new ClusterTestRequestProcessor(this, namesrvConfig.getProductEnvName()), this.defaultExecutor);
@@ -206,7 +206,6 @@ public class NamesrvController {
 			// Support get route info only temporarily
 			ClientRequestProcessor clientRequestProcessor = new ClientRequestProcessor(this);
 			this.remotingServer.registerProcessor(RequestCode.GET_ROUTEINFO_BY_TOPIC, clientRequestProcessor, this.clientRequestExecutor);
-
 			this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.defaultExecutor);
 		}
 	}

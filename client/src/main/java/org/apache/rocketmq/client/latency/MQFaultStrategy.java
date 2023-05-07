@@ -57,17 +57,20 @@ public class MQFaultStrategy {
     }
 
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
+        //故障退避: 当要发送的Broker在上一次发送中延迟了较久的时间或发送失败，会进行一段时间的退避
         if (this.sendLatencyFaultEnable) {
             try {
+                //首先，增加线程本地的轮询计数
                 int index = tpInfo.getSendWhichQueue().incrementAndGet();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = index++ % tpInfo.getMessageQueueList().size();
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
+                    //如果可用（不需要进行退避），则直接使用
                     if (!StringUtils.equals(lastBrokerName, mq.getBrokerName()) && latencyFaultTolerance.isAvailable(mq.getBrokerName())) {
                         return mq;
                     }
                 }
-
+                //在所有Broker都需要退避的情况下，即没有最优解，选择次优
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getWriteQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
@@ -78,6 +81,7 @@ public class MQFaultStrategy {
                     }
                     return mq;
                 } else {
+                    //如果可写 Queue已经为零，说明已经不在了
                     latencyFaultTolerance.remove(notBestBroker);
                 }
             } catch (Exception e) {

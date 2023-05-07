@@ -469,8 +469,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 		Runnable runnable = new Runnable() {
 			@Override
 			public void run() {
+				//计算所花费的时间，当前时间-开始时间点
 				long costTime = System.currentTimeMillis() - beginStartTime;
 				if (timeout > costTime) {
+					//如果不超时
 					try {
 						sendDefaultImpl(msg, CommunicationMode.ASYNC, sendCallback, timeout - costTime);
 					} catch (Exception e) {
@@ -540,23 +542,28 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 	}
 
 	private SendResult sendDefaultImpl(Message msg, final CommunicationMode communicationMode, final SendCallback sendCallback, final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+		//确保是start状态
 		this.makeSureStateOK();
 		Validators.checkMessage(msg, this.defaultMQProducer);
 		final long invokeID = random.nextLong();
 		long beginTimestampFirst = System.currentTimeMillis();
 		long beginTimestampPrev = beginTimestampFirst;
 		long endTimestamp = beginTimestampFirst;
+		//得到topic信息
 		TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
+		// 返回为Null的结果只有Topic不存在且自动创建Topic没有打开
 		if (topicPublishInfo != null && topicPublishInfo.ok()) {
 			boolean callTimeout = false;
 			MessageQueue mq = null;
 			Exception exception = null;
 			SendResult sendResult = null;
+			//最多发送次数
 			int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
 			int times = 0;
 			String[] brokersSent = new String[timesTotal];
 			for (; times < timesTotal; times++) {
 				String lastBrokerName = null == mq ? null : mq.getBrokerName();
+				//选择一个queue
 				MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
 				if (mqSelected != null) {
 					mq = mqSelected;
@@ -643,16 +650,18 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 			throw mqClientException;
 		}
-
+		//检查下是不是NameServer地址填错了
 		validateNameServerSetting();
 
 		throw new MQClientException("No route info of this topic: " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.NO_TOPIC_ROUTE_INFO), null).setResponseCode(ClientErrorCode.NOT_FOUND_TOPIC_EXCEPTION);
 	}
-
+	//寻找消息应该被发送到哪里
 	private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
 		TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
+		//本地没有或者未就绪，从NameServ请求
 		if (null == topicPublishInfo || !topicPublishInfo.ok()) {
 			this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
+			//没有信息则从NameServ拉取
 			this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
 			topicPublishInfo = this.topicPublishInfoTable.get(topic);
 		}
@@ -660,6 +669,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 		if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
 			return topicPublishInfo;
 		} else {
+			// 拉取不到？说明我们要发送的目标Topic不存在
+			// 那就打开isDefault开关，向默认Topic发送
 			this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
 			topicPublishInfo = this.topicPublishInfoTable.get(topic);
 			return topicPublishInfo;
