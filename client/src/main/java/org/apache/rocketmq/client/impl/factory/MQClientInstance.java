@@ -899,10 +899,12 @@ public class MQClientInstance {
 	}
 
 	public void doRebalance() {
+		//遍历消费者，对消费者进行负载均衡
 		for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
 			MQConsumerInner impl = entry.getValue();
 			if (impl != null) {
 				try {
+					//todo：负载均衡
 					impl.doRebalance();
 				} catch (Throwable e) {
 					log.error("doRebalance exception", e);
