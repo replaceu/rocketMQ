@@ -187,19 +187,27 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 		this.start(true);
 	}
 
+	/**
+	 * CREATE_JUST
+	 * RUNNING
+	 * START_FAILED
+	 * SHUTDOWN_ALREADY
+	 *
+	 * @param startFactory
+	 * @throws MQClientException
+	 */
 	public void start(final boolean startFactory) throws MQClientException {
 		switch (this.serviceState) {
 		case CREATE_JUST:
 			this.serviceState = ServiceState.START_FAILED;
-
 			this.checkConfig();
-
+			// 如果自定义了生产者组,则修改PID
 			if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
 				this.defaultMQProducer.changeInstanceNameToPID();
 			}
-
+			//从MQ工厂获取实例，MQ工厂保证clientId唯一
 			this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
-
+			// 注册生产者组
 			boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
 			if (!registerOK) {
 				this.serviceState = ServiceState.CREATE_JUST;
@@ -229,7 +237,6 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 	private void checkConfig() throws MQClientException {
 		Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
-
 		if (this.defaultMQProducer.getProducerGroup().equals(MixAll.DEFAULT_PRODUCER_GROUP)) { throw new MQClientException("producerGroup can not equal " + MixAll.DEFAULT_PRODUCER_GROUP + ", please specify another one.", null); }
 	}
 

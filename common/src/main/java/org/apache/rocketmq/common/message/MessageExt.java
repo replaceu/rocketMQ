@@ -25,292 +25,286 @@ import org.apache.rocketmq.common.TopicFilterType;
 import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 
 public class MessageExt extends Message {
-    private static final long serialVersionUID = 5720810158625748049L;
+	private static final long serialVersionUID = 5720810158625748049L;
 
-    private String brokerName;
+	private String	brokerName;
+	private int		queueId;
+	//存盘的大小
+	private int storeSize;
+	//在ConsumerQueue中的偏移量
+	private long	queueOffset;
+	private int		sysFlag;
+	//消息创建时间
+	private long bornTimestamp;
+	//创建地址
+	private SocketAddress bornHost;
+	//存盘时间
+	private long			storeTimestamp;
+	private SocketAddress	storeHost;
+	private String			msgId;
+	//在commitLog 中的偏移量
+	private long commitLogOffset;
+	//crc校验
+	private int		bodyCRC;
+	private int		reconsumeTimes;
+	private long	preparedTransactionOffset;
 
-    private int queueId;
+	public MessageExt() {
+	}
 
-    private int storeSize;
+	public MessageExt(int queueId, long bornTimestamp, SocketAddress bornHost, long storeTimestamp, SocketAddress storeHost, String msgId) {
+		this.queueId = queueId;
+		this.bornTimestamp = bornTimestamp;
+		this.bornHost = bornHost;
+		this.storeTimestamp = storeTimestamp;
+		this.storeHost = storeHost;
+		this.msgId = msgId;
+	}
 
-    private long queueOffset;
-    private int sysFlag;
-    private long bornTimestamp;
-    private SocketAddress bornHost;
+	public static TopicFilterType parseTopicFilterType(final int sysFlag) {
+		if ((sysFlag & MessageSysFlag.MULTI_TAGS_FLAG) == MessageSysFlag.MULTI_TAGS_FLAG) { return TopicFilterType.MULTI_TAG; }
 
-    private long storeTimestamp;
-    private SocketAddress storeHost;
-    private String msgId;
-    private long commitLogOffset;
-    private int bodyCRC;
-    private int reconsumeTimes;
+		return TopicFilterType.SINGLE_TAG;
+	}
 
-    private long preparedTransactionOffset;
+	public static ByteBuffer socketAddress2ByteBuffer(final SocketAddress socketAddress, final ByteBuffer byteBuffer) {
+		InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
+		InetAddress address = inetSocketAddress.getAddress();
+		if (address instanceof Inet4Address) {
+			byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 4);
+		} else {
+			byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 16);
+		}
+		byteBuffer.putInt(inetSocketAddress.getPort());
+		byteBuffer.flip();
+		return byteBuffer;
+	}
 
-    public MessageExt() {
-    }
+	public static ByteBuffer socketAddress2ByteBuffer(SocketAddress socketAddress) {
+		InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
+		InetAddress address = inetSocketAddress.getAddress();
+		ByteBuffer byteBuffer;
+		if (address instanceof Inet4Address) {
+			byteBuffer = ByteBuffer.allocate(4 + 4);
+		} else {
+			byteBuffer = ByteBuffer.allocate(16 + 4);
+		}
+		return socketAddress2ByteBuffer(socketAddress, byteBuffer);
+	}
 
-    public MessageExt(int queueId, long bornTimestamp, SocketAddress bornHost, long storeTimestamp,
-        SocketAddress storeHost, String msgId) {
-        this.queueId = queueId;
-        this.bornTimestamp = bornTimestamp;
-        this.bornHost = bornHost;
-        this.storeTimestamp = storeTimestamp;
-        this.storeHost = storeHost;
-        this.msgId = msgId;
-    }
+	public ByteBuffer getBornHostBytes() {
+		return socketAddress2ByteBuffer(this.bornHost);
+	}
 
-    public static TopicFilterType parseTopicFilterType(final int sysFlag) {
-        if ((sysFlag & MessageSysFlag.MULTI_TAGS_FLAG) == MessageSysFlag.MULTI_TAGS_FLAG) {
-            return TopicFilterType.MULTI_TAG;
-        }
+	public ByteBuffer getBornHostBytes(ByteBuffer byteBuffer) {
+		return socketAddress2ByteBuffer(this.bornHost, byteBuffer);
+	}
 
-        return TopicFilterType.SINGLE_TAG;
-    }
+	public ByteBuffer getStoreHostBytes() {
+		return socketAddress2ByteBuffer(this.storeHost);
+	}
 
-    public static ByteBuffer socketAddress2ByteBuffer(final SocketAddress socketAddress, final ByteBuffer byteBuffer) {
-        InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
-        InetAddress address = inetSocketAddress.getAddress();
-        if (address instanceof Inet4Address) {
-            byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 4);
-        } else {
-            byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 16);
-        }
-        byteBuffer.putInt(inetSocketAddress.getPort());
-        byteBuffer.flip();
-        return byteBuffer;
-    }
+	public ByteBuffer getStoreHostBytes(ByteBuffer byteBuffer) {
+		return socketAddress2ByteBuffer(this.storeHost, byteBuffer);
+	}
 
-    public static ByteBuffer socketAddress2ByteBuffer(SocketAddress socketAddress) {
-        InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
-        InetAddress address = inetSocketAddress.getAddress();
-        ByteBuffer byteBuffer;
-        if (address instanceof Inet4Address) {
-            byteBuffer = ByteBuffer.allocate(4 + 4);
-        } else {
-            byteBuffer = ByteBuffer.allocate(16 + 4);
-        }
-        return socketAddress2ByteBuffer(socketAddress, byteBuffer);
-    }
+	public String getBrokerName() {
+		return brokerName;
+	}
 
-    public ByteBuffer getBornHostBytes() {
-        return socketAddress2ByteBuffer(this.bornHost);
-    }
+	public void setBrokerName(String brokerName) {
+		this.brokerName = brokerName;
+	}
 
-    public ByteBuffer getBornHostBytes(ByteBuffer byteBuffer) {
-        return socketAddress2ByteBuffer(this.bornHost, byteBuffer);
-    }
+	public int getQueueId() {
+		return queueId;
+	}
 
-    public ByteBuffer getStoreHostBytes() {
-        return socketAddress2ByteBuffer(this.storeHost);
-    }
+	public void setQueueId(int queueId) {
+		this.queueId = queueId;
+	}
 
-    public ByteBuffer getStoreHostBytes(ByteBuffer byteBuffer) {
-        return socketAddress2ByteBuffer(this.storeHost, byteBuffer);
-    }
+	public long getBornTimestamp() {
+		return bornTimestamp;
+	}
 
-    public String getBrokerName() {
-        return brokerName;
-    }
+	public void setBornTimestamp(long bornTimestamp) {
+		this.bornTimestamp = bornTimestamp;
+	}
 
-    public void setBrokerName(String brokerName) {
-        this.brokerName = brokerName;
-    }
+	public SocketAddress getBornHost() {
+		return bornHost;
+	}
 
-    public int getQueueId() {
-        return queueId;
-    }
+	public void setBornHost(SocketAddress bornHost) {
+		this.bornHost = bornHost;
+	}
 
-    public void setQueueId(int queueId) {
-        this.queueId = queueId;
-    }
+	public String getBornHostString() {
+		if (null != this.bornHost) {
+			InetAddress inetAddress = ((InetSocketAddress) this.bornHost).getAddress();
 
-    public long getBornTimestamp() {
-        return bornTimestamp;
-    }
+			return null != inetAddress ? inetAddress.getHostAddress() : null;
+		}
 
-    public void setBornTimestamp(long bornTimestamp) {
-        this.bornTimestamp = bornTimestamp;
-    }
+		return null;
+	}
 
-    public SocketAddress getBornHost() {
-        return bornHost;
-    }
+	public String getBornHostNameString() {
+		if (null != this.bornHost) {
+			if (bornHost instanceof InetSocketAddress) {
+				// without reverse dns lookup
+				return ((InetSocketAddress) bornHost).getHostString();
+			}
+			InetAddress inetAddress = ((InetSocketAddress) this.bornHost).getAddress();
 
-    public void setBornHost(SocketAddress bornHost) {
-        this.bornHost = bornHost;
-    }
+			return null != inetAddress ? inetAddress.getHostName() : null;
+		}
 
-    public String getBornHostString() {
-        if (null != this.bornHost) {
-            InetAddress inetAddress = ((InetSocketAddress) this.bornHost).getAddress();
+		return null;
+	}
 
-            return null != inetAddress ? inetAddress.getHostAddress() : null;
-        }
+	public long getStoreTimestamp() {
+		return storeTimestamp;
+	}
 
-        return null;
-    }
+	public void setStoreTimestamp(long storeTimestamp) {
+		this.storeTimestamp = storeTimestamp;
+	}
 
-    public String getBornHostNameString() {
-        if (null != this.bornHost) {
-            if (bornHost instanceof InetSocketAddress) {
-                // without reverse dns lookup
-                return ((InetSocketAddress) bornHost).getHostString();
-            }
-            InetAddress inetAddress = ((InetSocketAddress) this.bornHost).getAddress();
+	public SocketAddress getStoreHost() {
+		return storeHost;
+	}
 
-            return null != inetAddress ? inetAddress.getHostName() : null;
-        }
+	public void setStoreHost(SocketAddress storeHost) {
+		this.storeHost = storeHost;
+	}
 
-        return null;
-    }
+	public String getMsgId() {
+		return msgId;
+	}
 
-    public long getStoreTimestamp() {
-        return storeTimestamp;
-    }
+	public void setMsgId(String msgId) {
+		this.msgId = msgId;
+	}
 
-    public void setStoreTimestamp(long storeTimestamp) {
-        this.storeTimestamp = storeTimestamp;
-    }
+	public int getSysFlag() {
+		return sysFlag;
+	}
 
-    public SocketAddress getStoreHost() {
-        return storeHost;
-    }
+	public void setSysFlag(int sysFlag) {
+		this.sysFlag = sysFlag;
+	}
 
-    public void setStoreHost(SocketAddress storeHost) {
-        this.storeHost = storeHost;
-    }
+	public void setStoreHostAddressV6Flag() {
+		this.sysFlag = this.sysFlag | MessageSysFlag.STOREHOSTADDRESS_V6_FLAG;
+	}
 
-    public String getMsgId() {
-        return msgId;
-    }
+	public void setBornHostV6Flag() {
+		this.sysFlag = this.sysFlag | MessageSysFlag.BORNHOST_V6_FLAG;
+	}
 
-    public void setMsgId(String msgId) {
-        this.msgId = msgId;
-    }
+	public int getBodyCRC() {
+		return bodyCRC;
+	}
 
-    public int getSysFlag() {
-        return sysFlag;
-    }
+	public void setBodyCRC(int bodyCRC) {
+		this.bodyCRC = bodyCRC;
+	}
 
-    public void setSysFlag(int sysFlag) {
-        this.sysFlag = sysFlag;
-    }
+	public long getQueueOffset() {
+		return queueOffset;
+	}
 
-    public void setStoreHostAddressV6Flag() { this.sysFlag = this.sysFlag | MessageSysFlag.STOREHOSTADDRESS_V6_FLAG; }
+	public void setQueueOffset(long queueOffset) {
+		this.queueOffset = queueOffset;
+	}
 
-    public void setBornHostV6Flag() { this.sysFlag = this.sysFlag | MessageSysFlag.BORNHOST_V6_FLAG; }
+	public long getCommitLogOffset() {
+		return commitLogOffset;
+	}
 
-    public int getBodyCRC() {
-        return bodyCRC;
-    }
+	public void setCommitLogOffset(long physicOffset) {
+		this.commitLogOffset = physicOffset;
+	}
 
-    public void setBodyCRC(int bodyCRC) {
-        this.bodyCRC = bodyCRC;
-    }
+	public int getStoreSize() {
+		return storeSize;
+	}
 
-    public long getQueueOffset() {
-        return queueOffset;
-    }
+	public void setStoreSize(int storeSize) {
+		this.storeSize = storeSize;
+	}
 
-    public void setQueueOffset(long queueOffset) {
-        this.queueOffset = queueOffset;
-    }
+	public int getReconsumeTimes() {
+		return reconsumeTimes;
+	}
 
-    public long getCommitLogOffset() {
-        return commitLogOffset;
-    }
+	public void setReconsumeTimes(int reconsumeTimes) {
+		this.reconsumeTimes = reconsumeTimes;
+	}
 
-    public void setCommitLogOffset(long physicOffset) {
-        this.commitLogOffset = physicOffset;
-    }
+	public long getPreparedTransactionOffset() {
+		return preparedTransactionOffset;
+	}
 
-    public int getStoreSize() {
-        return storeSize;
-    }
+	public void setPreparedTransactionOffset(long preparedTransactionOffset) {
+		this.preparedTransactionOffset = preparedTransactionOffset;
+	}
 
-    public void setStoreSize(int storeSize) {
-        this.storeSize = storeSize;
-    }
+	/**
+	 *
+	 * achieves topicSysFlag value from transient properties
+	 *
+	 * @return
+	 */
+	public Integer getTopicSysFlag() {
+		String topicSysFlagString = getProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG);
+		if (topicSysFlagString != null && topicSysFlagString.length() > 0) { return Integer.valueOf(topicSysFlagString); }
+		return null;
+	}
 
-    public int getReconsumeTimes() {
-        return reconsumeTimes;
-    }
+	/**
+	 * set topicSysFlag to transient properties, or clear it
+	 *
+	 * @param topicSysFlag
+	 */
+	public void setTopicSysFlag(Integer topicSysFlag) {
+		if (topicSysFlag == null) {
+			clearProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG);
+		} else {
+			putProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG, String.valueOf(topicSysFlag));
+		}
+	}
 
-    public void setReconsumeTimes(int reconsumeTimes) {
-        this.reconsumeTimes = reconsumeTimes;
-    }
+	/**
+	 *
+	 * achieves groupSysFlag value from transient properties
+	 *
+	 * @return
+	 */
+	public Integer getGroupSysFlag() {
+		String groupSysFlagString = getProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG);
+		if (groupSysFlagString != null && groupSysFlagString.length() > 0) { return Integer.valueOf(groupSysFlagString); }
+		return null;
+	}
 
-    public long getPreparedTransactionOffset() {
-        return preparedTransactionOffset;
-    }
+	/**
+	 *
+	 * set groupSysFlag to transient properties, or clear it
+	 *
+	 * @param groupSysFlag
+	 */
+	public void setGroupSysFlag(Integer groupSysFlag) {
+		if (groupSysFlag == null) {
+			clearProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG);
+		} else {
+			putProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG, String.valueOf(groupSysFlag));
+		}
+	}
 
-    public void setPreparedTransactionOffset(long preparedTransactionOffset) {
-        this.preparedTransactionOffset = preparedTransactionOffset;
-    }
-
-    /**
-     *
-     * achieves topicSysFlag value from transient properties
-     *
-     * @return
-     */
-    public Integer getTopicSysFlag() {
-        String topicSysFlagString = getProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG);
-        if (topicSysFlagString != null && topicSysFlagString.length() > 0) {
-            return Integer.valueOf(topicSysFlagString);
-        }
-        return null;
-    }
-
-    /**
-     * set topicSysFlag to transient properties, or clear it
-     *
-     * @param topicSysFlag
-     */
-    public void setTopicSysFlag(Integer topicSysFlag) {
-        if (topicSysFlag == null) {
-            clearProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG);
-        } else {
-            putProperty(MessageConst.PROPERTY_TRANSIENT_TOPIC_CONFIG, String.valueOf(topicSysFlag));
-        }
-    }
-
-    /**
-     *
-     * achieves groupSysFlag value from transient properties
-     *
-     * @return
-     */
-    public Integer getGroupSysFlag() {
-        String groupSysFlagString = getProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG);
-        if (groupSysFlagString != null && groupSysFlagString.length() > 0) {
-            return Integer.valueOf(groupSysFlagString);
-        }
-        return null;
-    }
-
-    /**
-     *
-     * set groupSysFlag to transient properties, or clear it
-     *
-     * @param groupSysFlag
-     */
-    public void setGroupSysFlag(Integer groupSysFlag) {
-        if (groupSysFlag == null) {
-            clearProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG);
-        } else {
-            putProperty(MessageConst.PROPERTY_TRANSIENT_GROUP_CONFIG, String.valueOf(groupSysFlag));
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "MessageExt [brokerName=" + brokerName + ", queueId=" + queueId + ", storeSize=" + storeSize + ", queueOffset=" + queueOffset
-            + ", sysFlag=" + sysFlag + ", bornTimestamp=" + bornTimestamp + ", bornHost=" + bornHost
-            + ", storeTimestamp=" + storeTimestamp + ", storeHost=" + storeHost + ", msgId=" + msgId
-            + ", commitLogOffset=" + commitLogOffset + ", bodyCRC=" + bodyCRC + ", reconsumeTimes="
-            + reconsumeTimes + ", preparedTransactionOffset=" + preparedTransactionOffset
-            + ", toString()=" + super.toString() + "]";
-    }
+	@Override
+	public String toString() {
+		return "MessageExt [brokerName=" + brokerName + ", queueId=" + queueId + ", storeSize=" + storeSize + ", queueOffset=" + queueOffset + ", sysFlag=" + sysFlag + ", bornTimestamp=" + bornTimestamp + ", bornHost=" + bornHost + ", storeTimestamp=" + storeTimestamp + ", storeHost=" + storeHost + ", msgId=" + msgId + ", commitLogOffset=" + commitLogOffset + ", bodyCRC=" + bodyCRC + ", reconsumeTimes=" + reconsumeTimes + ", preparedTransactionOffset=" + preparedTransactionOffset + ", toString()=" + super.toString() + "]";
+	}
 }

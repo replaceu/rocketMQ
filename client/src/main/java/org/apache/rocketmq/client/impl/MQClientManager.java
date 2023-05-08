@@ -26,44 +26,41 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 public class MQClientManager {
-    private final static Logger log = LoggerFactory.getLogger(MQClientManager.class);
-    private static MQClientManager instance = new MQClientManager();
-    private AtomicInteger factoryIndexGenerator = new AtomicInteger();
-    private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
-        new ConcurrentHashMap<>();
+	private final static Logger										log						= LoggerFactory.getLogger(MQClientManager.class);
+	private static MQClientManager									instance				= new MQClientManager();
+	private AtomicInteger											factoryIndexGenerator	= new AtomicInteger();
+	private ConcurrentMap<String/* clientId */, MQClientInstance>	factoryTable			= new ConcurrentHashMap<>();
 
-    private MQClientManager() {
+	private MQClientManager() {
 
-    }
+	}
 
-    public static MQClientManager getInstance() {
-        return instance;
-    }
+	public static MQClientManager getInstance() {
+		return instance;
+	}
 
-    public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig) {
-        return getOrCreateMQClientInstance(clientConfig, null);
-    }
+	public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig) {
+		return getOrCreateMQClientInstance(clientConfig, null);
+	}
 
-    public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
-        String clientId = clientConfig.buildMQClientId();
-        MQClientInstance instance = this.factoryTable.get(clientId);
-        if (null == instance) {
-            instance =
-                new MQClientInstance(clientConfig.cloneClientConfig(),
-                    this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
-            MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
-            if (prev != null) {
-                instance = prev;
-                log.warn("Returned Previous MQClientInstance for clientId:[{}]", clientId);
-            } else {
-                log.info("Created new MQClientInstance for clientId:[{}]", clientId);
-            }
-        }
+	public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+		String clientId = clientConfig.buildMQClientId();
+		MQClientInstance instance = this.factoryTable.get(clientId);
+		if (null == instance) {
+			instance = new MQClientInstance(clientConfig.cloneClientConfig(), this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+			MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
+			if (prev != null) {
+				instance = prev;
+				log.warn("Returned Previous MQClientInstance for clientId:[{}]", clientId);
+			} else {
+				log.info("Created new MQClientInstance for clientId:[{}]", clientId);
+			}
+		}
 
-        return instance;
-    }
+		return instance;
+	}
 
-    public void removeClientFactory(final String clientId) {
-        this.factoryTable.remove(clientId);
-    }
+	public void removeClientFactory(final String clientId) {
+		this.factoryTable.remove(clientId);
+	}
 }

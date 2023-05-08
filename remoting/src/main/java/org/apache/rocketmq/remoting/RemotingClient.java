@@ -29,56 +29,48 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public interface RemotingClient extends RemotingService {
 
-    void updateNameServerAddressList(final List<String> addrs);
+	void updateNameServerAddressList(final List<String> addrs);
 
-    List<String> getNameServerAddressList();
+	List<String> getNameServerAddressList();
 
-    List<String> getAvailableNameSrvList();
+	List<String> getAvailableNameSrvList();
 
-    RemotingCommand invokeSync(final String addr, final RemotingCommand request,
-        final long timeoutMillis) throws InterruptedException, RemotingConnectException,
-        RemotingSendRequestException, RemotingTimeoutException;
+	RemotingCommand invokeSync(final String addr, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException;
 
-    void invokeAsync(final String addr, final RemotingCommand request, final long timeoutMillis,
-        final InvokeCallback invokeCallback) throws InterruptedException, RemotingConnectException,
-        RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException;
+	void invokeAsync(final String addr, final RemotingCommand request, final long timeoutMillis, final InvokeCallback invokeCallback) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException;
 
-    void invokeOneway(final String addr, final RemotingCommand request, final long timeoutMillis)
-        throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException,
-        RemotingTimeoutException, RemotingSendRequestException;
+	void invokeOneway(final String addr, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException;
 
-    default CompletableFuture<RemotingCommand> invoke(final String addr, final RemotingCommand request,
-        final long timeoutMillis) {
-        CompletableFuture<RemotingCommand> future = new CompletableFuture<>();
-        try {
-            invokeAsync(addr, request, timeoutMillis, responseFuture -> {
-                RemotingCommand response = responseFuture.getResponseCommand();
-                if (response != null) {
-                    future.complete(response);
-                } else {
-                    if (!responseFuture.isSendRequestOK()) {
-                        future.completeExceptionally(new RemotingSendRequestException(addr, responseFuture.getCause()));
-                    } else if (responseFuture.isTimeout()) {
-                        future.completeExceptionally(new RemotingTimeoutException(addr, timeoutMillis, responseFuture.getCause()));
-                    } else {
-                        future.completeExceptionally(new RemotingException(request.toString(), responseFuture.getCause()));
-                    }
-                }
-            });
-        } catch (Throwable t) {
-            future.completeExceptionally(t);
-        }
-        return future;
-    }
+	default CompletableFuture<RemotingCommand> invoke(final String addr, final RemotingCommand request, final long timeoutMillis) {
+		CompletableFuture<RemotingCommand> future = new CompletableFuture<>();
+		try {
+			invokeAsync(addr, request, timeoutMillis, responseFuture -> {
+				RemotingCommand response = responseFuture.getResponseCommand();
+				if (response != null) {
+					future.complete(response);
+				} else {
+					if (!responseFuture.isSendRequestOK()) {
+						future.completeExceptionally(new RemotingSendRequestException(addr, responseFuture.getCause()));
+					} else if (responseFuture.isTimeout()) {
+						future.completeExceptionally(new RemotingTimeoutException(addr, timeoutMillis, responseFuture.getCause()));
+					} else {
+						future.completeExceptionally(new RemotingException(request.toString(), responseFuture.getCause()));
+					}
+				}
+			});
+		} catch (Throwable t) {
+			future.completeExceptionally(t);
+		}
+		return future;
+	}
 
-    void registerProcessor(final int requestCode, final NettyRequestProcessor processor,
-        final ExecutorService executor);
+	void registerProcessor(final int requestCode, final NettyRequestProcessor processor, final ExecutorService executor);
 
-    void setCallbackExecutor(final ExecutorService callbackExecutor);
+	void setCallbackExecutor(final ExecutorService callbackExecutor);
 
-    boolean isChannelWritable(final String addr);
+	boolean isChannelWritable(final String addr);
 
-    boolean isAddressReachable(final String addr);
+	boolean isAddressReachable(final String addr);
 
-    void closeChannels(final List<String> addrList);
+	void closeChannels(final List<String> addrList);
 }
