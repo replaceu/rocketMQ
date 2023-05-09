@@ -96,7 +96,9 @@ public class DefaultHAService implements HAService {
 
 	@Override
 	public boolean isSlaveOK(final long masterPutWhere) {
+		//与master的连接数
 		boolean result = this.connectionCount.get() > 0;
+		//master推送的位移减去推送给slave的位移是否小于slave配置的最大落后位移
 		result = result && masterPutWhere - this.push2SlaveMaxOffset.get() < this.defaultMessageStore.getMessageStoreConfig().getHaMaxGapNotInSync();
 		return result;
 	}
@@ -120,11 +122,15 @@ public class DefaultHAService implements HAService {
 
 	@Override
 	public void start() throws Exception {
+		//开始监听slave连接
 		this.acceptSocketService.beginAccept();
+		//监听slave 连接创建
 		this.acceptSocketService.start();
+		//判断主从同步是否结束
 		this.groupTransferService.start();
 		this.haConnectionStateNotificationService.start();
 		if (haClient != null) {
+			//ha客户端启动
 			this.haClient.start();
 		}
 	}
@@ -289,15 +295,21 @@ public class DefaultHAService implements HAService {
 		 * @throws Exception If fails.
 		 */
 		public void beginAccept() throws Exception {
+			//创建ServerSocketChannel
 			this.serverSocketChannel = ServerSocketChannel.open();
+			//创建Selector
 			this.selector = NetworkUtil.openSelector();
+			//设置TCP reuseAddress
 			this.serverSocketChannel.socket().setReuseAddress(true);
+			//绑定监听套接字（IP、port）slave的ip和port
 			this.serverSocketChannel.socket().bind(this.socketAddressListen);
 			if (0 == messageStoreConfig.getHaListenPort()) {
 				messageStoreConfig.setHaListenPort(this.serverSocketChannel.socket().getLocalPort());
 				log.info("OS picked up {} to listen for HA", messageStoreConfig.getHaListenPort());
 			}
+			//设置非阻塞
 			this.serverSocketChannel.configureBlocking(false);
+			//注册OP_ACCEPT(连接事件)
 			this.serverSocketChannel.register(this.selector, SelectionKey.OP_ACCEPT);
 		}
 
@@ -329,17 +341,22 @@ public class DefaultHAService implements HAService {
 
 			while (!this.isStopped()) {
 				try {
+					//选择器每1s处理一次连接就绪事件
 					this.selector.select(1000);
 					Set<SelectionKey> selected = this.selector.selectedKeys();
 
 					if (selected != null) {
+						//遍历所有的连接就绪事件
 						for (SelectionKey k : selected) {
+							//如果事件已经就绪和是连接就绪事件
 							if (k.isAcceptable()) {
+								//连接通道
 								SocketChannel sc = ((ServerSocketChannel) k.channel()).accept();
 
 								if (sc != null) {
 									DefaultHAService.log.info("HAService receive new connection, " + sc.socket().getRemoteSocketAddress());
 									try {
+										//创建HA连接，并且启动，添加连接集合中
 										HAConnection conn = createConnection(sc);
 										conn.start();
 										DefaultHAService.this.addConnection(conn);
@@ -352,7 +369,7 @@ public class DefaultHAService implements HAService {
 								log.warn("Unexpected ops in select " + k.readyOps());
 							}
 						}
-
+						//清除所有的选择事件
 						selected.clear();
 					}
 				} catch (Exception e) {

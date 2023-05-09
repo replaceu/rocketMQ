@@ -37,140 +37,141 @@ import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAService;
  */
 public class GroupTransferService extends ServiceThread {
 
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+	private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    private final WaitNotifyObject notifyTransferObject = new WaitNotifyObject();
-    private final PutMessageSpinLock lock = new PutMessageSpinLock();
-    private final DefaultMessageStore defaultMessageStore;
-    private final HAService haService;
-    private volatile List<CommitLog.GroupCommitRequest> requestsWrite = new LinkedList<>();
-    private volatile List<CommitLog.GroupCommitRequest> requestsRead = new LinkedList<>();
+	private final WaitNotifyObject						notifyTransferObject	= new WaitNotifyObject();
+	private final PutMessageSpinLock					lock					= new PutMessageSpinLock();
+	private final DefaultMessageStore					defaultMessageStore;
+	private final HAService								haService;
+	private volatile List<CommitLog.GroupCommitRequest>	requestsWrite			= new LinkedList<>();
+	private volatile List<CommitLog.GroupCommitRequest>	requestsRead			= new LinkedList<>();
 
-    public GroupTransferService(final HAService haService, final DefaultMessageStore defaultMessageStore) {
-        this.haService = haService;
-        this.defaultMessageStore = defaultMessageStore;
-    }
+	public GroupTransferService(final HAService haService, final DefaultMessageStore defaultMessageStore) {
+		this.haService = haService;
+		this.defaultMessageStore = defaultMessageStore;
+	}
 
-    public void putRequest(final CommitLog.GroupCommitRequest request) {
-        lock.lock();
-        try {
-            this.requestsWrite.add(request);
-        } finally {
-            lock.unlock();
-        }
-        wakeup();
-    }
+	public void putRequest(final CommitLog.GroupCommitRequest request) {
+		lock.lock();
+		try {
+			this.requestsWrite.add(request);
+		} finally {
+			lock.unlock();
+		}
+		wakeup();
+	}
 
-    public void notifyTransferSome() {
-        this.notifyTransferObject.wakeup();
-    }
+	public void notifyTransferSome() {
+		this.notifyTransferObject.wakeup();
+	}
 
-    private void swapRequests() {
-        lock.lock();
-        try {
-            List<CommitLog.GroupCommitRequest> tmp = this.requestsWrite;
-            this.requestsWrite = this.requestsRead;
-            this.requestsRead = tmp;
-        } finally {
-            lock.unlock();
-        }
-    }
+	private void swapRequests() {
+		lock.lock();
+		try {
+			List<CommitLog.GroupCommitRequest> tmp = this.requestsWrite;
+			this.requestsWrite = this.requestsRead;
+			this.requestsRead = tmp;
+		} finally {
+			lock.unlock();
+		}
+	}
 
-    private void doWaitTransfer() {
-        if (!this.requestsRead.isEmpty()) {
-            for (CommitLog.GroupCommitRequest req : this.requestsRead) {
-                boolean transferOK = false;
+	private void doWaitTransfer() {
+		//如果主从同步结束读请求不为空
+		if (!this.requestsRead.isEmpty()) {
+			//遍历所有主从同步结束读请求
+			for (CommitLog.GroupCommitRequest req : this.requestsRead) {
+				boolean transferOK = false;
 
-                long deadLine = req.getDeadLine();
-                final boolean allAckInSyncStateSet = req.getAckNums() == MixAll.ALL_ACK_IN_SYNC_STATE_SET;
+				long deadLine = req.getDeadLine();
+				final boolean allAckInSyncStateSet = req.getAckNums() == MixAll.ALL_ACK_IN_SYNC_STATE_SET;
 
-                for (int i = 0; !transferOK && deadLine - System.nanoTime() > 0; i++) {
-                    if (i > 0) {
-                        this.notifyTransferObject.waitForRunning(1000);
-                    }
+				for (int i = 0; !transferOK && deadLine - System.nanoTime() > 0; i++) {
+					if (i > 0) {
+						//等待1秒，并且交换主从同步结束读请求与主从同步结束写请求
+						this.notifyTransferObject.waitForRunning(1000);
+					}
 
-                    if (!allAckInSyncStateSet && req.getAckNums() <= 1) {
-                        transferOK = haService.getPush2SlaveMaxOffset().get() >= req.getNextOffset();
-                        continue;
-                    }
+					if (!allAckInSyncStateSet && req.getAckNums() <= 1) {
+						//推送给slave的最大的位移是否大于等于下一条消息的起始偏移量
+						transferOK = haService.getPush2SlaveMaxOffset().get() >= req.getNextOffset();
+						continue;
+					}
 
-                    if (allAckInSyncStateSet && this.haService instanceof AutoSwitchHAService) {
-                        // In this mode, we must wait for all replicas that in SyncStateSet.
-                        final AutoSwitchHAService autoSwitchHAService = (AutoSwitchHAService) this.haService;
-                        final Set<Long> syncStateSet = autoSwitchHAService.getSyncStateSet();
-                        if (syncStateSet.size() <= 1) {
-                            // Only master
-                            transferOK = true;
-                            break;
-                        }
+					if (allAckInSyncStateSet && this.haService instanceof AutoSwitchHAService) {
+						// In this mode, we must wait for all replicas that in SyncStateSet.
+						final AutoSwitchHAService autoSwitchHAService = (AutoSwitchHAService) this.haService;
+						final Set<Long> syncStateSet = autoSwitchHAService.getSyncStateSet();
+						if (syncStateSet.size() <= 1) {
+							// Only master
+							transferOK = true;
+							break;
+						}
 
-                        // Include master
-                        int ackNums = 1;
-                        for (HAConnection conn : haService.getConnectionList()) {
-                            final AutoSwitchHAConnection autoSwitchHAConnection = (AutoSwitchHAConnection) conn;
-                            if (syncStateSet.contains(autoSwitchHAConnection.getSlaveId()) && autoSwitchHAConnection.getSlaveAckOffset() >= req.getNextOffset()) {
-                                ackNums++;
-                            }
-                            if (ackNums >= syncStateSet.size()) {
-                                transferOK = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        // Include master
-                        int ackNums = 1;
-                        for (HAConnection conn : haService.getConnectionList()) {
-                            // TODO: We must ensure every HAConnection represents a different slave
-                            // Solution: Consider assign a unique and fixed IP:ADDR for each different slave
-                            if (conn.getSlaveAckOffset() >= req.getNextOffset()) {
-                                ackNums++;
-                            }
-                            if (ackNums >= req.getAckNums()) {
-                                transferOK = true;
-                                break;
-                            }
-                        }
-                    }
-                }
+						// Include master
+						int ackNums = 1;
+						for (HAConnection conn : haService.getConnectionList()) {
+							final AutoSwitchHAConnection autoSwitchHAConnection = (AutoSwitchHAConnection) conn;
+							if (syncStateSet.contains(autoSwitchHAConnection.getSlaveId()) && autoSwitchHAConnection.getSlaveAckOffset() >= req.getNextOffset()) {
+								ackNums++;
+							}
+							if (ackNums >= syncStateSet.size()) {
+								transferOK = true;
+								break;
+							}
+						}
+					} else {
+						// Include master
+						int ackNums = 1;
+						for (HAConnection conn : haService.getConnectionList()) {
+							// TODO: We must ensure every HAConnection represents a different slave
+							// Solution: Consider assign a unique and fixed IP:ADDR for each different slave
+							if (conn.getSlaveAckOffset() >= req.getNextOffset()) {
+								ackNums++;
+							}
+							if (ackNums >= req.getAckNums()) {
+								transferOK = true;
+								break;
+							}
+						}
+					}
+				}
+				//如果超时，打印日志
+				if (!transferOK) {
+					log.warn("transfer message to slave timeout, offset : {}, request acks: {}", req.getNextOffset(), req.getAckNums());
+				}
+				//设置最终的同步状态
+				req.wakeupCustomer(transferOK ? PutMessageStatus.PUT_OK : PutMessageStatus.FLUSH_SLAVE_TIMEOUT);
+			}
 
-                if (!transferOK) {
-                    log.warn("transfer message to slave timeout, offset : {}, request acks: {}",
-                        req.getNextOffset(), req.getAckNums());
-                }
+			this.requestsRead = new LinkedList<>();
+		}
+	}
 
-                req.wakeupCustomer(transferOK ? PutMessageStatus.PUT_OK : PutMessageStatus.FLUSH_SLAVE_TIMEOUT);
-            }
+	@Override
+	public void run() {
+		log.info(this.getServiceName() + " service started");
 
-            this.requestsRead = new LinkedList<>();
-        }
-    }
+		while (!this.isStopped()) {
+			try {
+				this.waitForRunning(10);
+				this.doWaitTransfer();
+			} catch (Exception e) {
+				log.warn(this.getServiceName() + " service has exception. ", e);
+			}
+		}
 
-    @Override
-    public void run() {
-        log.info(this.getServiceName() + " service started");
+		log.info(this.getServiceName() + " service end");
+	}
 
-        while (!this.isStopped()) {
-            try {
-                this.waitForRunning(10);
-                this.doWaitTransfer();
-            } catch (Exception e) {
-                log.warn(this.getServiceName() + " service has exception. ", e);
-            }
-        }
+	@Override
+	protected void onWaitEnd() {
+		this.swapRequests();
+	}
 
-        log.info(this.getServiceName() + " service end");
-    }
-
-    @Override
-    protected void onWaitEnd() {
-        this.swapRequests();
-    }
-
-    @Override
-    public String getServiceName() {
-        if (defaultMessageStore != null && defaultMessageStore.getBrokerConfig().isInBrokerContainer()) {
-            return defaultMessageStore.getBrokerIdentity().getIdentifier() + GroupTransferService.class.getSimpleName();
-        }
-        return GroupTransferService.class.getSimpleName();
-    }
+	@Override
+	public String getServiceName() {
+		if (defaultMessageStore != null && defaultMessageStore.getBrokerConfig().isInBrokerContainer()) { return defaultMessageStore.getBrokerIdentity().getIdentifier() + GroupTransferService.class.getSimpleName(); }
+		return GroupTransferService.class.getSimpleName();
+	}
 }

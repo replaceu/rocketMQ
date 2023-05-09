@@ -102,27 +102,39 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 		return this.masterAddress.get();
 	}
 
+	/**
+	 * 判断是否需要向Master汇报已拉取消息偏移量
+	 * @return
+	 */
 	private boolean isTimeToReportOffset() {
+		//当前时间减去最后一次写时间
 		long interval = defaultMessageStore.now() - this.lastWriteTimestamp;
+		//大于发送心跳时间间隔
 		return interval > defaultMessageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
 	}
 
 	private boolean reportSlaveMaxOffset(final long maxOffset) {
+		//发送8字节的请求
 		this.reportOffset.position(0);
 		this.reportOffset.limit(REPORT_HEADER_SIZE);
+		//最大偏移量
 		this.reportOffset.putLong(maxOffset);
 		this.reportOffset.position(0);
 		this.reportOffset.limit(REPORT_HEADER_SIZE);
-
+		//如果需要向Master反馈当前拉取偏移量，则向Master发送一个8字节的请求，请求包中包含的数据为当前Broker消息文件的最大偏移量。
+		//如果还有剩余空间并且循环次数小于3
 		for (int i = 0; i < 3 && this.reportOffset.hasRemaining(); i++) {
 			try {
+				//发送上报的偏移量
 				this.socketChannel.write(this.reportOffset);
 			} catch (IOException e) {
 				log.error(this.getServiceName() + "reportSlaveMaxOffset this.socketChannel.write exception", e);
 				return false;
 			}
 		}
+		//最后一次写时间
 		lastWriteTimestamp = this.defaultMessageStore.getSystemClock().now();
+		//是否还有剩余空间
 		return !this.reportOffset.hasRemaining();
 	}
 
@@ -149,14 +161,20 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 		this.byteBufferBackup = tmp;
 	}
 
+	//处理读事件
 	private boolean processReadEvent() {
 		int readSizeZeroTimes = 0;
+		//判断是否还有剩余
 		while (this.byteBufferRead.hasRemaining()) {
 			try {
+				//读取到缓存中
 				int readSize = this.socketChannel.read(this.byteBufferRead);
+				//如果读取的大小大于0
 				if (readSize > 0) {
 					flowMonitor.addByteCountTransferred(readSize);
+					//重置读取到0字节的次数
 					readSizeZeroTimes = 0;
+					//分发读请求
 					boolean result = this.dispatchReadRequest();
 					if (!result) {
 						log.error("HAClient, dispatchReadRequest error");
@@ -164,6 +182,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 					}
 					lastReadTimestamp = System.currentTimeMillis();
 				} else if (readSize == 0) {
+					//如果连续3次从网络通道读取到0个字节，则结束本次读，返回 true
 					if (++readSizeZeroTimes >= 3) {
 						break;
 					}
@@ -180,39 +199,59 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 		return true;
 	}
 
+	/**
+	 * dispatchReadRequest方法将读取到的数据一条一条解析，并且落盘保存到本地。但是读取的数据可能不是完整的，
+	 * 所以要判断读取的数据是否完整，消息包括消息头和消息体，消息头12字节长度，包括物理偏移量与消息的长度。
+	 * 首先判断读取到数据的长度是否大于消息头部长度，如果小于说明读取的数据是不完整的，则判断byteBufferRead是否还有剩余空间，
+	 * 并且将readByteBuffer中剩余的有效数据先复制到readByteBufferBak,然后交换readByteBuffer与readByteBufferBak。
+	 *
+	 * 如果读取的数据的长度大于消息头部长度，则判断master和slave的偏移量是否相等，如果slave的最大物理偏移量与master给的偏移量不相等，则返回false。
+	 * 在后续的处理中，返回false，将会关闭与master的连接。如果读取的数据长度大于等于消息头长读与消息体长度，
+	 * 说明读取的数据是包好完整消息的，将消息体的内容从byteBufferRead中读取出来，并且将消息保存到commitLog文件中。
+	 *
+	 * 总结起来，HAClient类的作用就是Slave上报自己的最大偏移量，以及处理从master拉取过来的数据并落盘保存起来。
+	 * @return
+	 */
 	private boolean dispatchReadRequest() {
+		//记录当前byteBufferRead的当前指针
 		int readSocketPos = this.byteBufferRead.position();
-
 		while (true) {
+			//当前指针减去本次己处理读缓存区的指针
 			int diff = this.byteBufferRead.position() - this.dispatchPosition;
+			//是否大于头部长度，是否包含头部
 			if (diff >= DefaultHAConnection.TRANSFER_HEADER_SIZE) {
+				//master的物理偏移量
 				long masterPhyOffset = this.byteBufferRead.getLong(this.dispatchPosition);
+				//消息的长度
 				int bodySize = this.byteBufferRead.getInt(this.dispatchPosition + 8);
-
+				//slave偏移量
 				long slavePhyOffset = this.defaultMessageStore.getMaxPhyOffset();
-
+				//如果slave的最大物理偏移量与master给的偏移量不相等，则返回false
+				//从后面的处理逻辑来看，返回false,将会关闭与master的连接，在Slave本次周期内将不会再参与主从同步了。
 				if (slavePhyOffset != 0) {
 					if (slavePhyOffset != masterPhyOffset) {
 						log.error("master pushed offset not equal the max phy offset in slave, SLAVE: " + slavePhyOffset + " MASTER: " + masterPhyOffset);
 						return false;
 					}
 				}
-
+				//包含完整的信息
 				if (diff >= (DefaultHAConnection.TRANSFER_HEADER_SIZE + bodySize)) {
+					//读取消息到缓冲区
 					byte[] bodyData = byteBufferRead.array();
 					int dataStart = this.dispatchPosition + DefaultHAConnection.TRANSFER_HEADER_SIZE;
-
+					//添加到commit log 文件
 					this.defaultMessageStore.appendToCommitLog(masterPhyOffset, bodyData, dataStart, bodySize);
-
 					this.byteBufferRead.position(readSocketPos);
+					//当前的已读缓冲区指针
 					this.dispatchPosition += DefaultHAConnection.TRANSFER_HEADER_SIZE + bodySize;
-
+					//上报slave最大的复制偏移量
 					if (!reportSlaveMaxOffsetPlus()) { return false; }
 
 					continue;
 				}
 			}
-
+			//没有包含完整的消息，
+			//其核心思想是将readByteBuffer中剩余的有效数据先复制到readByteBufferBak,然后交换readByteBuffer与readByteBufferBak
 			if (!this.byteBufferRead.hasRemaining()) {
 				this.reallocateByteBuffer();
 			}
@@ -243,6 +282,15 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 		this.currentState = currentState;
 	}
 
+	/**
+	 * connectMaster方法是slave主动连接master，首先判断该slave与master的socketChannel是否等于null，
+	 * 如果等于socketChannel等于null，则创建slave与master的连接，然后注册OP_READ的事件，
+	 * 并初始化currentReportedOffset 为commitLog文件的最大偏移量。
+	 * 如果Broker启动的时候，配置的角色是Slave时，但是masterAddress没有配置，那么就不会连接master。
+	 * 最后该方法返回是否成功连接上master
+	 * @return
+	 * @throws ClosedChannelException
+	 */
 	public boolean connectMaster() throws ClosedChannelException {
 		if (null == socketChannel) {
 			String addr = this.masterHaAddress.get();
@@ -255,9 +303,9 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 					this.changeCurrentState(HAConnectionState.TRANSFER);
 				}
 			}
-
+			//设置当前的复制进度为commitlog文件的最大偏移量
 			this.currentReportedOffset = this.defaultMessageStore.getMaxPhyOffset();
-
+			//最后一次写的时间
 			this.lastReadTimestamp = System.currentTimeMillis();
 		}
 
@@ -340,17 +388,18 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
 
 	private boolean transferFromMaster() throws IOException {
 		boolean result;
+		//当前时间减去最后一些写时间，大于发送心跳时间间隔，那么就需要向master上报已拉取的消息偏移量
 		if (this.isTimeToReportOffset()) {
 			log.info("Slave report current offset {}", this.currentReportedOffset);
 			result = this.reportSlaveMaxOffset(this.currentReportedOffset);
 			if (!result) { return false; }
 		}
-
+		//进行事件选择，其执行间隔为 1s
 		this.selector.select(1000);
-
+		//处理读事件
 		result = this.processReadEvent();
 		if (!result) { return false; }
-
+		//上报slave最大的偏移量
 		return reportSlaveMaxOffsetPlus();
 	}
 

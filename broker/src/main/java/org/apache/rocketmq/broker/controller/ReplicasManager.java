@@ -350,11 +350,13 @@ public class ReplicasManager {
     }
 
     private void handleSlaveSynchronize(final BrokerRole role) {
+        //如果broker的角色是slave
         if (role == BrokerRole.SLAVE) {
             if (this.slaveSyncFuture != null) {
                 this.slaveSyncFuture.cancel(false);
             }
             this.brokerController.getSlaveSynchronize().setMasterAddr(this.masterAddress);
+            //启动定时任务同步元数据
             slaveSyncFuture = this.brokerController.getScheduledExecutorService().scheduleAtFixedRate(() -> {
                 try {
                     if (System.currentTimeMillis() - lastSyncTimeMs > 10 * 1000) {
